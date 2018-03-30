@@ -122,46 +122,52 @@ func (matrix *matrix) submatrix(rowStart, colStart, size int) matrix {
 	return subMatrix
 }
 
+func (matrix *matrix) quads(size int) (m11, m12, m21, m22 matrix) {
+	m11 = matrix.submatrix(0, 0, size)
+	m12 = matrix.submatrix(0, size, size)
+	m21 = matrix.submatrix(size, 0, size)
+	m22 = matrix.submatrix(size, size, size)
+
+	return
+}
+
+func dncQuad(a, b, c, d *matrix) matrix {
+	x := dnc(a, b, false)
+	y := dnc(c, d, false)
+
+	return x.add(&y)
+}
+
+func combineQuads(a, b, c, d *matrix, size int) matrix {
+	m := createMatrix(size*2, size*2)
+
+	a.each(func(row, col int) {
+		m.set(row, col, a.at(row, col))
+		m.set(row, col+size, b.at(row, col))
+		m.set(row+size, col, c.at(row, col))
+		m.set(row+size, col+size, d.at(row, col))
+	})
+
+	return m
+}
+
 // divide and conquer
-func dnc(a, b *matrix) matrix {
+func dnc(a, b *matrix, first bool) matrix {
 	size := a.rows / 2
+
 	if size == 1 {
 		return a.multiply(b)
 	}
 
-	a11 := a.submatrix(0, 0, size)
-	a12 := a.submatrix(0, size, size)
-	a21 := a.submatrix(size, 0, size)
-	a22 := a.submatrix(size, size, size)
-	b11 := b.submatrix(0, 0, size)
-	b12 := b.submatrix(0, size, size)
-	b21 := b.submatrix(size, 0, size)
-	b22 := b.submatrix(size, size, size)
+	a11, a12, a21, a22 := a.quads(size)
+	b11, b12, b21, b22 := b.quads(size)
 
-	c11a := dnc(&a11, &b11)
-	c11b := dnc(&a12, &b21)
-	c12a := dnc(&a11, &b12)
-	c12b := dnc(&a12, &b22)
-	c21a := dnc(&a21, &b11)
-	c21b := dnc(&a22, &b21)
-	c22a := dnc(&a21, &b12)
-	c22b := dnc(&a22, &b22)
+	c11 := dncQuad(&a11, &b11, &a12, &b21)
+	c12 := dncQuad(&a11, &b12, &a12, &b22)
+	c21 := dncQuad(&a21, &b11, &a22, &b21)
+	c22 := dncQuad(&a21, &b12, &a22, &b22)
 
-	c11 := c11a.add(&c11b)
-	c12 := c12a.add(&c12b)
-	c21 := c21a.add(&c21b)
-	c22 := c22a.add(&c22b)
-
-	c := createMatrix(a.rows, a.cols)
-
-	c11.each(func(row, col int) {
-		c.set(row, col, c11.at(row, col))
-		c.set(row, col+size, c12.at(row, col))
-		c.set(row+size, col, c21.at(row, col))
-		c.set(row+size, col+size, c22.at(row, col))
-	})
-
-	return c
+	return combineQuads(&c11, &c12, &c21, &c22, size)
 }
 
 func dotProduct(a, b *[]int) int {
@@ -190,9 +196,9 @@ func main() {
 	a.fill()
 	b.fill()
 
-	dnc(&a, &b)
+	c := dnc(&a, &b, size > 32)
 
-	// c.print()
+	c.print()
 
 	// var c = make(chan *[][]int)
 
