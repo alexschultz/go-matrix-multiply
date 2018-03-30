@@ -3,7 +3,7 @@ package main
 import "fmt"
 
 type matrix struct {
-	data      [][]int
+	data      *[][]int
 	rows      int
 	cols      int
 	rowOffset int
@@ -13,16 +13,29 @@ type matrix struct {
 type eachElementFn func(int, int)
 type transformFn func(int, int) int
 
+/*
+ * Factory method to help with creating a matrix
+ */
 func createMatrix(rows, cols int) matrix {
-	matrix := matrix{make([][]int, rows), rows, cols, 0, 0}
+	data := make([][]int, rows)
+	matrix := matrix{&data, rows, cols, 0, 0}
 
 	for i := 0; i < rows; i++ {
-		matrix.data[i] = make([]int, cols)
+		data[i] = make([]int, cols)
 	}
 
 	return matrix
 }
 
+// -- Matrix Functions -- //
+
+/*
+ * Loop over all elements of the matrix without needing
+ * a loop.
+ *
+ * matrix.each(func(row, col int){ ... })
+ *
+ */
 func (matrix *matrix) each(f eachElementFn) {
 	for row := 0; row < matrix.rows; row++ {
 		for col := 0; col < matrix.cols; col++ {
@@ -31,6 +44,13 @@ func (matrix *matrix) each(f eachElementFn) {
 	}
 }
 
+/*
+ * Loop over all elements of the matrix and set
+ * each element to a new value
+ *
+ * matrix.transform(func(row, col int) int { return ... })
+ *
+ */
 func (matrix *matrix) transform(f transformFn) {
 	for row := 0; row < matrix.rows; row++ {
 		for col := 0; col < matrix.cols; col++ {
@@ -39,6 +59,12 @@ func (matrix *matrix) transform(f transformFn) {
 	}
 }
 
+/*
+ * Get a single row from the matrix
+ *
+ * row := matrix.row(0)
+ *
+ */
 func (matrix *matrix) row(row int) *[]int {
 	r := make([]int, matrix.cols)
 
@@ -50,13 +76,16 @@ func (matrix *matrix) row(row int) *[]int {
 }
 
 func (matrix *matrix) set(row, col, val int) {
-	matrix.data[row+matrix.rowOffset][col+matrix.colOffset] = val
+	data := matrix.data
+	(*data)[row+matrix.rowOffset][col+matrix.colOffset] = val
 }
 
 func (matrix *matrix) at(row, col int) int {
-	return matrix.data[row+matrix.rowOffset][col+matrix.colOffset]
+	data := matrix.data
+	return (*data)[row+matrix.rowOffset][col+matrix.colOffset]
 }
 
+// print the REAL data
 func (matrix *matrix) print() {
 	m := createMatrix(matrix.rows, matrix.cols)
 
@@ -67,12 +96,14 @@ func (matrix *matrix) print() {
 	fmt.Println(m.data)
 }
 
+// just fill the matrix will all 2's for this example
 func (matrix *matrix) fill() {
 	matrix.transform(func(row, col int) int {
-		return 2
+		return col + 1
 	})
 }
 
+// copy a matrix
 func (matrix *matrix) copy() matrix {
 	matrixCopy := *matrix
 
@@ -89,6 +120,12 @@ func (matrix *matrix) transpose() matrix {
 	return transposedMatrix
 }
 
+/*
+ * Add 2 matrices and create a new matrix
+ *
+ * newMatrix := matrix.add(otherMatrix)
+ *
+ */
 func (matrix *matrix) add(b *matrix) matrix {
 	c := createMatrix(matrix.rows, matrix.cols)
 
@@ -99,6 +136,12 @@ func (matrix *matrix) add(b *matrix) matrix {
 	return c
 }
 
+/*
+ * Multiply 2 matrices and create a new matrix
+ *
+ * newMatrix := matrix.multiply(otherMatrix)
+ *
+ */
 func (matrix *matrix) multiply(b *matrix) matrix {
 	c := createMatrix(matrix.rows, b.cols)
 	bTrans := b.transpose()
@@ -110,6 +153,19 @@ func (matrix *matrix) multiply(b *matrix) matrix {
 	return c
 }
 
+/*
+ * Create a sub matrix (like a substring)
+ *
+ * This function is the key to keeping the memory as low as possible.
+ * We give the new sub matrix a pointer to the parent matrix's data,
+ * however, by setting a row and col offset along with a size,
+ * we can use the other matrix methods to easily abstract the
+ * fact that there is more data than needed.  Thus, sharing a pointer
+ * to the data and using offers can save tons of memory.
+ *
+ * subMatrix := matrix.submatrix(0, 0, 2)
+ *
+ */
 func (matrix *matrix) submatrix(rowStart, colStart, size int) matrix {
 	subMatrix := createMatrix(size, size)
 
@@ -122,6 +178,9 @@ func (matrix *matrix) submatrix(rowStart, colStart, size int) matrix {
 	return subMatrix
 }
 
+// -- End Matrix Functions -- //
+
+// Split the matrix into 4 quadirants
 func (matrix *matrix) quads(size int) (m11, m12, m21, m22 matrix) {
 	m11 = matrix.submatrix(0, 0, size)
 	m12 = matrix.submatrix(0, size, size)
@@ -131,10 +190,12 @@ func (matrix *matrix) quads(size int) (m11, m12, m21, m22 matrix) {
 	return
 }
 
+// Thread wrapper for dnc on a top level quadirant (divideAndConquer)
 func dncQuadThread(a, b, c, d *matrix, ch chan matrix) {
 	ch <- dncQuad(a, b, c, d)
 }
 
+// divideAndConquer for a 4 quadirants
 func dncQuad(a, b, c, d *matrix) matrix {
 	x := dnc(a, b, false)
 	y := dnc(c, d, false)
@@ -142,6 +203,9 @@ func dncQuad(a, b, c, d *matrix) matrix {
 	return x.add(&y)
 }
 
+// combine 4 matrix into a single large matrix via quadirants
+// [[a b]
+//  [c d]]
 func combineQuads(a, b, c, d *matrix, size int) matrix {
 	m := createMatrix(size*2, size*2)
 
@@ -155,7 +219,8 @@ func combineQuads(a, b, c, d *matrix, size int) matrix {
 	return m
 }
 
-// divide and conquer
+// divide and conquer matrix multiplication
+// this is where recursion starts
 func dnc(a, b *matrix, first bool) matrix {
 	size := a.rows / 2
 
@@ -167,6 +232,9 @@ func dnc(a, b *matrix, first bool) matrix {
 	b11, b12, b21, b22 := b.quads(size)
 
 	var c11, c12, c21, c22 matrix
+
+	// if it is the first time calling dnc, start threads
+	// since we are at the top most level
 	if first {
 		var ch1 = make(chan matrix)
 		var ch2 = make(chan matrix)
@@ -194,6 +262,7 @@ func dnc(a, b *matrix, first bool) matrix {
 	return combineQuads(&c11, &c12, &c21, &c22, size)
 }
 
+// Dot Product of 2 Matrices
 func dotProduct(a, b *[]int) int {
 	c := make([]int, len(*a))
 	var product int
@@ -212,34 +281,26 @@ func dotProduct(a, b *[]int) int {
 func main() {
 	var size int
 
+	// get matrix size from user
 	fmt.Scanln(&size)
 	fmt.Println(size)
+
+	show := size < 16
 
 	a := createMatrix(size, size)
 	a.fill()
 
-	dnc(&a, &a, size > 32)
+	b := createMatrix(size, size)
+	b.fill()
 
-	// c.print()
+	if show {
+		a.print()
+		b.print()
+	}
+	// only thread if the size is greater than 32
+	c := dnc(&a, &b, size > 32)
 
-	// var c = make(chan *[][]in)
-
-	// a := makeMatrix(size, size)
-
-	// for row := 0; row < size; row++ {
-	// 	for col := 0; col < size; col++ {
-	// 		a[row][col] = 2 * (row + col + 1)
-	// 	}
-	// }
-
-	// dnc(&a, &a, c)
-
-	// fmt.Println(<-c)
-
-	// fmt.Println(a)
-	// fmt.Println(b)
-	// fmt.Println(*done)
-	// fmt.Println(transpose(&b))
-	// fmt.Println(*dnc(&a, &b))
-	// fmt.Println(add(&a, &b))
+	if show {
+		c.print()
+	}
 }
