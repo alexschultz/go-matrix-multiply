@@ -96,18 +96,11 @@ func (matrix *matrix) print() {
 	fmt.Println(m.data)
 }
 
-// just fill the matrix will all 2's for this example
+// fill the matrix with example data
 func (matrix *matrix) fill() {
 	matrix.transform(func(row, col int) int {
 		return col + 1
 	})
-}
-
-// copy a matrix
-func (matrix *matrix) copy() matrix {
-	matrixCopy := *matrix
-
-	return matrixCopy
 }
 
 func (matrix *matrix) transpose() matrix {
@@ -161,7 +154,7 @@ func (matrix *matrix) multiply(b *matrix) matrix {
  * however, by setting a row and col offset along with a size,
  * we can use the other matrix methods to easily abstract the
  * fact that there is more data than needed.  Thus, sharing a pointer
- * to the data and using offers can save tons of memory.
+ * to the data and using offsets can save tons of memory.
  *
  * subMatrix := matrix.submatrix(0, 0, 2)
  *
@@ -219,7 +212,7 @@ func combineQuads(a, b, c, d *matrix, size int) matrix {
 	return m
 }
 
-// divide and conquer matrix multiplication
+// divide and conquer (dnc) matrix multiplication
 // this is where recursion starts
 func dnc(a, b *matrix, first bool) matrix {
 	size := a.rows / 2
@@ -297,6 +290,7 @@ func main() {
 		a.print()
 		b.print()
 	}
+
 	// only thread if the size is greater than 32
 	c := dnc(&a, &b, size > 32)
 
