@@ -69,7 +69,7 @@ func (matrix *matrix) print() {
 
 func (matrix *matrix) fill() {
 	matrix.transform(func(row, col int) int {
-		return col + 1
+		return 2
 	})
 }
 
@@ -131,6 +131,10 @@ func (matrix *matrix) quads(size int) (m11, m12, m21, m22 matrix) {
 	return
 }
 
+func dncQuadThread(a, b, c, d *matrix, ch chan matrix) {
+	ch <- dncQuad(a, b, c, d)
+}
+
 func dncQuad(a, b, c, d *matrix) matrix {
 	x := dnc(a, b, false)
 	y := dnc(c, d, false)
@@ -162,10 +166,30 @@ func dnc(a, b *matrix, first bool) matrix {
 	a11, a12, a21, a22 := a.quads(size)
 	b11, b12, b21, b22 := b.quads(size)
 
-	c11 := dncQuad(&a11, &b11, &a12, &b21)
-	c12 := dncQuad(&a11, &b12, &a12, &b22)
-	c21 := dncQuad(&a21, &b11, &a22, &b21)
-	c22 := dncQuad(&a21, &b12, &a22, &b22)
+	var c11, c12, c21, c22 matrix
+	if first {
+		var ch1 = make(chan matrix)
+		var ch2 = make(chan matrix)
+		var ch3 = make(chan matrix)
+		var ch4 = make(chan matrix)
+
+		go dncQuadThread(&a11, &b11, &a12, &b21, ch1)
+		go dncQuadThread(&a11, &b12, &a12, &b22, ch2)
+		go dncQuadThread(&a21, &b11, &a22, &b21, ch3)
+		go dncQuadThread(&a21, &b12, &a22, &b22, ch4)
+
+		//wait
+		c11 = <-ch1
+		c12 = <-ch2
+		c21 = <-ch3
+		c22 = <-ch4
+
+	} else {
+		c11 = dncQuad(&a11, &b11, &a12, &b21)
+		c12 = dncQuad(&a11, &b12, &a12, &b22)
+		c21 = dncQuad(&a21, &b11, &a22, &b21)
+		c22 = dncQuad(&a21, &b12, &a22, &b22)
+	}
 
 	return combineQuads(&c11, &c12, &c21, &c22, size)
 }
@@ -192,15 +216,13 @@ func main() {
 	fmt.Println(size)
 
 	a := createMatrix(size, size)
-	b := a
 	a.fill()
-	b.fill()
 
-	c := dnc(&a, &b, size > 32)
+	dnc(&a, &a, size > 32)
 
-	c.print()
+	// c.print()
 
-	// var c = make(chan *[][]int)
+	// var c = make(chan *[][]in)
 
 	// a := makeMatrix(size, size)
 
